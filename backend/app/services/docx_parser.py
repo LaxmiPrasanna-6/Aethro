@@ -614,11 +614,24 @@ def validate_and_build_hostel_lodge_room(raw: dict, block_index: int) -> dict:
             f"got '{raw['beds']}'"
         )
 
+    features = [f.strip() for f in raw.get("features", "").split(",") if f.strip()]
+
+    # Infer room_type from features: "Non-AC" → non_ac, "AC" → ac, else non_ac default
+    features_lower = [f.lower().replace("-", "").replace(" ", "") for f in features]
+    if "nonac" in features_lower:
+        room_type = "non_ac"
+    elif "ac" in features_lower:
+        room_type = "ac"
+    else:
+        room_type = "non_ac"
+
     return {
         "room_id":       raw["room_id"].strip(),
         "floor":         floor,
         "capacity":      beds,  # beds = capacity
-        "features":      [f.strip() for f in raw.get("features", "").split(",") if f.strip()],
+        "room_type":     room_type,
+        "sharing_type":  beds,  # beds in a room = sharing count
+        "features":      features,
     }
 
 

@@ -276,6 +276,7 @@ export default function WardenDashboard() {
   const [summary, setSummary] = useState(null)
   const [activeTab, setActiveTab] = useState('rooms')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [emptyFilters, setEmptyFilters] = useState({ room_type: 'all', sharing_type: 'all' })
 
   const load = async () => {
     hostelAPI.getRooms().then(r => setRooms(r.data)).catch(() => {})
@@ -363,29 +364,86 @@ export default function WardenDashboard() {
             </div>
           )}
 
-          {activeTab === 'empty' && emptyRooms && (
-            <div className="card">
-              <h2 className="font-semibold text-gray-900 mb-4">Empty Rooms ({emptyRooms.total_empty_rooms})</h2>
-              <div className="space-y-4">
-                {Object.entries(emptyRooms.by_floor).map(([floor, floorRooms]) => (
-                  <div key={floor}>
-                    <h3 className="font-medium text-sm text-gray-700 mb-2">Floor {floor}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {floorRooms.map(r => (
-                        <div key={r.id} className="border border-green-200 bg-green-50 rounded-lg p-3">
-                          <p className="font-medium text-sm">{r.room_id}</p>
-                          <p className="text-xs text-gray-600 mt-1">{r.capacity} bed(s) • {(r.features || []).join(', ') || 'No amenities'}</p>
-                          <button onClick={() => occupy(r.id)} className="w-full bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium mt-2 py-1.5 rounded-lg">
-                            Admit Guest
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+          {activeTab === 'empty' && emptyRooms && (() => {
+            const inferRoomType = (r) => {
+              if (r.room_type) return r.room_type
+              const feats = (r.features || []).map(f => f.toLowerCase().replace(/[-\s]/g, ''))
+              if (feats.includes('nonac')) return 'non_ac'
+              if (feats.includes('ac')) return 'ac'
+              return null
+            }
+            const inferSharing = (r) => r.sharing_type ?? r.capacity
+            const matches = (r) =>
+              (emptyFilters.room_type === 'all' || inferRoomType(r) === emptyFilters.room_type) &&
+              (emptyFilters.sharing_type === 'all' || inferSharing(r) === +emptyFilters.sharing_type)
+            const filteredByFloor = Object.entries(emptyRooms.by_floor)
+              .map(([floor, rs]) => [floor, rs.filter(matches)])
+              .filter(([, rs]) => rs.length > 0)
+            const filteredCount = filteredByFloor.reduce((sum, [, rs]) => sum + rs.length, 0)
+            const filtersActive = emptyFilters.room_type !== 'all' || emptyFilters.sharing_type !== 'all'
+            return (
+              <div className="card">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <h2 className="font-semibold text-gray-900">
+                    Empty Rooms ({filtersActive ? `${filteredCount} of ${emptyRooms.total_empty_rooms}` : emptyRooms.total_empty_rooms})
+                  </h2>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      className="input py-1.5 text-xs w-auto"
+                      value={emptyFilters.room_type}
+                      onChange={e => setEmptyFilters(f => ({ ...f, room_type: e.target.value }))}
+                    >
+                      <option value="all">All Room Types</option>
+                      {ROOM_TYPES.map(t => <option key={t} value={t}>{t.replace('_', ' ').toUpperCase()}</option>)}
+                    </select>
+                    <select
+                      className="input py-1.5 text-xs w-auto"
+                      value={emptyFilters.sharing_type}
+                      onChange={e => setEmptyFilters(f => ({ ...f, sharing_type: e.target.value }))}
+                    >
+                      <option value="all">All Sharing</option>
+                      {SHARING_TYPES.map(t => <option key={t} value={t}>{t} Sharing</option>)}
+                    </select>
+                    {filtersActive && (
+                      <button
+                        onClick={() => setEmptyFilters({ room_type: 'all', sharing_type: 'all' })}
+                        className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                      >
+                        Clear
+                      </button>
+                    )}
                   </div>
-                ))}
+                </div>
+                {filteredCount === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-6">No empty rooms match the selected filters.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredByFloor.map(([floor, floorRooms]) => (
+                      <div key={floor}>
+                        <h3 className="font-medium text-sm text-gray-700 mb-2">Floor {floor}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {floorRooms.map(r => (
+                            <div key={r.id} className="border border-green-200 bg-green-50 rounded-lg p-3">
+                              <p className="font-medium text-sm">{r.room_id}</p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {r.capacity} bed(s)
+                                {r.room_type ? ` • ${r.room_type.replace('_', ' ').toUpperCase()}` : ''}
+                                {r.sharing_type ? ` • ${r.sharing_type} Sharing` : ''}
+                              </p>
+                              <p className="text-xs text-gray-600">{(r.features || []).join(', ') || 'No amenities'}</p>
+                              <button onClick={() => occupy(r.id)} className="w-full bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium mt-2 py-1.5 rounded-lg">
+                                Admit Guest
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {activeTab === 'summary' && summary && (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">

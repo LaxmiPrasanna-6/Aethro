@@ -33,7 +33,13 @@ export default function Register() {
     setLoading(true)
     try {
       await authAPI.register(form)
-      toast.success('Registration successful! Please log in.')
+      const needsApproval = !['admin', 'warden', 'manager'].includes(form.role)
+      toast.success(
+        needsApproval
+          ? 'Registered! Your account is pending admin approval before you can log in.'
+          : 'Registration successful! Please log in.',
+        { duration: 6000 }
+      )
       navigate('/login')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Registration failed')

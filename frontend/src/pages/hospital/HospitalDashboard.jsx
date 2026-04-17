@@ -5,6 +5,7 @@ import BookingForm from '../../components/booking/BookingForm'
 import BookingList from '../../components/booking/BookingList'
 import BookingApproval from '../../components/admin/BookingApproval'
 import Analytics from '../../components/admin/Analytics'
+import UserApprovals from '../../components/admin/UserApprovals'
 import { hospitalAPI, authAPI } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../context/AuthContext'
@@ -306,7 +307,18 @@ export default function HospitalDashboard() {
 
           {activeTab === 'analytics' && <Analytics />}
 
-          {activeTab === 'users' && <ReputationReport />}
+          {activeTab === 'users' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="card">
+                <h2 className="font-semibold mb-4">Doctor & Reception Approvals</h2>
+                <p className="text-xs text-gray-500 mb-3">
+                  New doctors and reception staff must be approved here before they can log in and book resources.
+                </p>
+                <UserApprovals filterRoles={['doctor', 'reception']} />
+              </div>
+              <ReputationReport />
+            </div>
+          )}
         </main>
       </div>
     </div>

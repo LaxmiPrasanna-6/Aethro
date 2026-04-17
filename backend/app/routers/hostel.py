@@ -202,6 +202,8 @@ async def upload_rooms_docx(
             "room_id":           room["room_id"],
             "floor":             room["floor"],
             "capacity":          room["capacity"],
+            "room_type":         room.get("room_type", "non_ac"),
+            "sharing_type":      room.get("sharing_type", room["capacity"]),
             "features":          room["features"],
             "org_id":            current_user["org_id"],
             "org_type":          "hostel",
