@@ -4,6 +4,7 @@ Hospital resource management with advanced features:
 - Bundle booking (multi-resource)
 - Reputation/no-show tracking
 - Proximity-aware allocation
+- Patient registration and doctor assignment
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
@@ -12,7 +13,9 @@ from datetime import datetime
 
 from app.database import get_db
 from app.schemas.resource import HospitalResourceCreate, HospitalResourceFilter
+from app.schemas.patient import PatientCreate, PatientUpdate
 from app.services.allocation_service import get_available_resources, predict_demand
+from app.services.symptom_service import suggest_specialization, find_available_doctors
 from app.services.docx_parser import (
     parse_docx_hospital_resources,
     generate_hospital_template_docx,
@@ -282,3 +285,199 @@ async def download_hospital_template(current_user=Depends(get_current_user)):
             "Content-Disposition": "attachment; filename=hospital_blueprint_template.docx"
         },
     )
+
+
+# ── Patient endpoints ─────────────────────────────────────────────────────────
+
+def _serialize_patient(p: dict) -> dict:
+    p = dict(p)
+    p["id"] = str(p.pop("_id"))
+    p["org_id"] = str(p.get("org_id", ""))
+    p["registered_by"] = str(p.get("registered_by", ""))
+    if p.get("assigned_doctor_id"):
+        p["assigned_doctor_id"] = str(p["assigned_doctor_id"])
+    if p.get("assigned_resource_id"):
+        p["assigned_resource_id"] = str(p["assigned_resource_id"])
+    return p
+
+
+@router.post("/patients", summary="Register a new patient (Reception only)")
+async def register_patient(data: PatientCreate, current_user=Depends(get_current_user), db=Depends(get_db)):
+    _require_hospital(current_user)
+    if current_user["role"] not in ("reception", "admin"):
+        raise HTTPException(403, "Only reception or admin can register patients")
+
+    specialization = suggest_specialization(data.symptoms)
+    doctors = await find_available_doctors(current_user["org_id"], specialization, db)
+
+    assigned_doctor = doctors[0] if doctors else None
+
+    now = datetime.utcnow()
+    doc = {
+        "name": data.name,
+        "age": data.age,
+        "gender": data.gender,
+        "contact": data.contact,
+        "symptoms": data.symptoms,
+        "emergency": data.emergency,
+        "notes": data.notes,
+        "suggested_specialization": specialization,
+        "assigned_doctor_id": assigned_doctor["_id"] if assigned_doctor else None,
+        "assigned_doctor_name": assigned_doctor["username"] if assigned_doctor else None,
+        "assigned_resource_id": None,
+        "assigned_resource_name": None,
+        "treatment_notes": None,
+        "status": "registered",
+        "registered_by": current_user["_id"],
+        "org_id": current_user["org_id"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    result = await db.patients.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return _serialize_patient(doc)
+
+
+@router.get("/patients", summary="List all patients in the organization")
+async def list_patients(
+    status: str = Query(None),
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    _require_hospital(current_user)
+    query = {"org_id": current_user["org_id"]}
+    if status:
+        query["status"] = status
+    # Doctors see only their assigned patients
+    if current_user["role"] == "doctor":
+        query["assigned_doctor_id"] = current_user["_id"]
+    patients = await db.patients.find(query).sort("created_at", -1).to_list(500)
+    return [_serialize_patient(p) for p in patients]
+
+
+@router.get("/patients/{patient_id}", summary="Get patient details")
+async def get_patient(patient_id: str, current_user=Depends(get_current_user), db=Depends(get_db)):
+    _require_hospital(current_user)
+    patient = await db.patients.find_one({"_id": ObjectId(patient_id), "org_id": current_user["org_id"]})
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+    return _serialize_patient(patient)
+
+
+@router.patch("/patients/{patient_id}", summary="Update patient status or assignment")
+async def update_patient(
+    patient_id: str,
+    data: PatientUpdate,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    _require_hospital(current_user)
+    if current_user["role"] not in ("doctor", "admin", "reception"):
+        raise HTTPException(403, "Not authorized")
+
+    patient = await db.patients.find_one({"_id": ObjectId(patient_id), "org_id": current_user["org_id"]})
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+
+    update: dict = {"updated_at": datetime.utcnow()}
+    if data.status is not None:
+        update["status"] = data.status
+    if data.emergency is not None:
+        update["emergency"] = data.emergency
+    if data.treatment_notes is not None:
+        update["treatment_notes"] = data.treatment_notes
+    if data.assigned_doctor_id is not None:
+        doctor = await db.users.find_one({"_id": ObjectId(data.assigned_doctor_id), "org_id": current_user["org_id"]})
+        if not doctor:
+            raise HTTPException(404, "Doctor not found")
+        update["assigned_doctor_id"] = doctor["_id"]
+        update["assigned_doctor_name"] = doctor["username"]
+    if data.assigned_resource_id is not None:
+        resource = await db.resources.find_one({"_id": ObjectId(data.assigned_resource_id), "org_id": current_user["org_id"]})
+        if not resource:
+            raise HTTPException(404, "Resource not found")
+        update["assigned_resource_id"] = resource["_id"]
+        update["assigned_resource_name"] = resource.get("room_id")
+
+    await db.patients.update_one({"_id": ObjectId(patient_id)}, {"$set": update})
+    updated = await db.patients.find_one({"_id": ObjectId(patient_id)})
+    return _serialize_patient(updated)
+
+
+# ── Doctor availability endpoints ─────────────────────────────────────────────
+
+@router.get("/doctors", summary="List doctors with availability status")
+async def list_doctors(current_user=Depends(get_current_user), db=Depends(get_db)):
+    _require_hospital(current_user)
+    doctors = await db.users.find({
+        "org_id": current_user["org_id"],
+        "role": "doctor",
+        "is_authorized": True,
+    }).to_list(200)
+    return serialize_list([{
+        "id": str(d["_id"]),
+        "username": d["username"],
+        "specialization": d.get("specialization") or "general medicine",
+        "availability_status": d.get("availability_status") or "available",
+        "reputation_score": d.get("reputation_score", 5.0),
+        "department": d.get("department"),
+    } for d in doctors])
+
+
+@router.post("/doctors/suggest", summary="Suggest doctor based on symptoms")
+async def suggest_doctor(
+    symptoms: list[str],
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    _require_hospital(current_user)
+    specialization = suggest_specialization(symptoms)
+    doctors = await find_available_doctors(current_user["org_id"], specialization, db)
+    return {
+        "suggested_specialization": specialization,
+        "doctors": serialize_list([{
+            "id": str(d["_id"]),
+            "username": d["username"],
+            "specialization": d.get("specialization") or "general medicine",
+            "availability_status": d.get("availability_status") or "available",
+            "reputation_score": d.get("reputation_score", 5.0),
+        } for d in doctors[:5]]),
+    }
+
+
+@router.patch("/doctors/availability", summary="Update own availability status (Doctor only)")
+async def update_availability(
+    status: str = Query(..., description="available | busy | off_duty"),
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    _require_hospital(current_user)
+    if current_user["role"] != "doctor":
+        raise HTTPException(403, "Only doctors can update availability status")
+    allowed = {"available", "busy", "off_duty"}
+    if status not in allowed:
+        raise HTTPException(400, f"Status must be one of: {', '.join(allowed)}")
+    await db.users.update_one({"_id": current_user["_id"]}, {"$set": {"availability_status": status}})
+    return {"availability_status": status}
+
+
+@router.get("/availability", summary="Real-time availability summary (rooms, ICU, labs)")
+async def availability_summary(current_user=Depends(get_current_user), db=Depends(get_db)):
+    _require_hospital(current_user)
+    org_id = current_user["org_id"]
+    resources = await db.resources.find({"org_id": org_id, "org_type": "hospital"}).to_list(1000)
+
+    summary: dict = {}
+    for r in resources:
+        rtype = r.get("resource_type", "other")
+        if rtype not in summary:
+            summary[rtype] = {"total": 0, "available": 0, "occupied": 0, "items": []}
+        summary[rtype]["total"] += 1
+        is_avail = r.get("is_available", True) and r.get("current_occupancy", 0) < r.get("capacity", 1)
+        if is_avail:
+            summary[rtype]["available"] += 1
+        else:
+            summary[rtype]["occupied"] += 1
+        summary[rtype]["items"].append(serialize_doc(dict(r)))
+
+    return summary

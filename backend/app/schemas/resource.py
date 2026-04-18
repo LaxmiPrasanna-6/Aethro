@@ -147,7 +147,7 @@ class LodgeRoomFilter(BaseModel):
 
 # ─── Hospital ─────────────────────────────────────────────────────────────────
 
-HospitalResourceType = Literal["ward", "icu", "ot", "consultation", "bed"]
+HospitalResourceType = Literal["ward", "icu", "ot", "consultation", "bed", "lab"]
 
 
 class HospitalResourceCreate(BaseModel):

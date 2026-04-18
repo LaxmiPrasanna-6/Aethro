@@ -14,6 +14,7 @@ class RegisterRequest(BaseModel):
     org_name: Optional[str] = None
     department: Optional[str] = None
     club: Optional[str] = None
+    specialization: Optional[str] = None  # hospital doctors
 
     @field_validator("confirm_password")
     @classmethod
@@ -52,6 +53,8 @@ class UserResponse(BaseModel):
     org_id: Optional[str] = None
     department: Optional[str] = None
     club: Optional[str] = None
+    specialization: Optional[str] = None
+    availability_status: Optional[str] = None  # available / busy / off_duty
     is_authorized: bool
     reputation_score: float = 5.0
     no_show_count: int = 0

@@ -1,10 +1,15 @@
+import random
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 
 from app.database import get_db
-from app.schemas.user import RegisterRequest, TokenResponse, UserResponse, UserUpdate
+from app.schemas.user import RegisterRequest, UserUpdate
 from app.services.auth_service import register_user, login_user, get_org_users, authorize_user
-from app.utils.dependencies import get_current_user, serialize_doc, serialize_list, require_roles
+from app.utils.dependencies import get_current_user, serialize_doc, serialize_list
+from app.utils.security import hash_password
 
 router = APIRouter()
 
@@ -57,3 +62,58 @@ async def update_me(data: UserUpdate, current_user=Depends(get_current_user), db
         return_document=True,
     )
     return _user_response(dict(result))
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
+@router.post("/forgot-password", summary="Request a password reset code")
+async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
+    email = data.email.strip()
+    user = await db.users.find_one({"email": {"$regex": f"^{email}$", "$options": "i"}})
+    # Always return the same message to avoid user enumeration
+    if not user:
+        return {"message": "If that email is registered, a reset code has been sent."}
+
+    code = str(random.randint(100000, 999999))
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {"reset_code": code, "reset_expiry": expiry}},
+    )
+    # In production, send via email. For demo: return code in response.
+    return {"message": "Reset code generated.", "code": code}
+
+
+@router.post("/reset-password", summary="Reset password using the 6-digit code")
+async def reset_password(data: ResetPasswordRequest, db=Depends(get_db)):
+    email = data.email.strip().lower()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(400, "Invalid request")
+
+    stored_code = user.get("reset_code")
+    expiry = user.get("reset_expiry")
+
+    if not stored_code or stored_code != data.code:
+        raise HTTPException(400, "Invalid reset code")
+    if not expiry or datetime.utcnow() > expiry:
+        raise HTTPException(400, "Reset code has expired. Please request a new one.")
+    if len(data.new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
+    await db.users.update_one(
+        {"email": email},
+        {
+            "$set": {"password_hash": hash_password(data.new_password)},
+            "$unset": {"reset_code": "", "reset_expiry": ""},
+        },
+    )
+    return {"message": "Password reset successfully. You can now log in."}

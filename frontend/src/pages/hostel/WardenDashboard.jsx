@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Sidebar from '../../components/common/Sidebar'
 import Navbar from '../../components/common/Navbar'
 import { hostelAPI } from '../../services/api'
 import toast from 'react-hot-toast'
-import { Plus, BedDouble, RefreshCw, Minus, UploadCloud, Download, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, BedDouble, RefreshCw, Minus, UploadCloud, Download } from 'lucide-react'
 
 const SHARING_TYPES = [1, 2, 3, 4]
 const ROOM_TYPES = ['ac', 'non_ac']
@@ -271,10 +272,11 @@ function UploadDocxSection({ onSuccess }) {
 }
 
 export default function WardenDashboard() {
+  const [searchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'rooms'
   const [rooms, setRooms] = useState([])
   const [emptyRooms, setEmptyRooms] = useState(null)
   const [summary, setSummary] = useState(null)
-  const [activeTab, setActiveTab] = useState('rooms')
   const [showAddForm, setShowAddForm] = useState(false)
   const [emptyFilters, setEmptyFilters] = useState({ room_type: 'all', sharing_type: 'all' })
 
@@ -293,26 +295,14 @@ export default function WardenDashboard() {
     try { await hostelAPI.vacateBed(id, 1); load() } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
   }
 
-  const TABS = [
-    { id: 'rooms', label: 'Rooms' },
-    { id: 'empty', label: 'Empty Rooms' },
-    { id: 'summary', label: 'Summary' }
-  ]
-
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Navbar title="Hostel Warden Dashboard" />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === t.id ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600'}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+        <main className="flex-1 overflow-y-auto p-6 relative">
+          <div className="orb w-72 h-72 bg-amber-300 top-[-60px] right-[-40px]" style={{ animationDelay: '0s' }} />
+          <div className="orb w-56 h-56 bg-orange-200 bottom-10 left-10" style={{ animationDelay: '3s' }} />
 
           {activeTab === 'rooms' && (
             <div className="space-y-4">
@@ -328,9 +318,9 @@ export default function WardenDashboard() {
                   </div>
                 </div>
                 {showAddForm && <AddRoomForm onSuccess={() => { setShowAddForm(false); load() }} />}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 stagger">
                   {rooms.map(r => (
-                    <div key={r.id} className={`border rounded-xl p-4 ${r.is_available ? 'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'}`}>
+                    <div key={r.id} className={r.is_available ? 'card-available p-4' : 'card-occupied p-4'}>
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="font-semibold text-sm">{r.room_id}</p>
@@ -344,7 +334,7 @@ export default function WardenDashboard() {
                           <span>{r.current_occupancy}/{r.capacity}</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div className="bg-primary-600 h-2 rounded-full transition-all" style={{ width: `${(r.current_occupancy / r.capacity) * 100}%` }} />
+                          <div className="progress-bar bg-primary-600" style={{ width: `${(r.current_occupancy / r.capacity) * 100}%` }} />
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -446,7 +436,7 @@ export default function WardenDashboard() {
           })()}
 
           {activeTab === 'summary' && summary && (
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 page-enter stagger">
               {[
                 { label: 'Total Rooms', value: summary.total_rooms },
                 { label: 'Total Beds', value: summary.total_beds },
@@ -454,9 +444,9 @@ export default function WardenDashboard() {
                 { label: 'Vacant Beds', value: summary.vacant_beds, color: 'text-green-600' },
                 { label: 'Occupancy Rate', value: `${summary.occupancy_rate}%`, color: 'text-primary-600' },
               ].map(s => (
-                <div key={s.label} className="card">
-                  <p className="text-xs text-gray-500 mb-1">{s.label}</p>
-                  <p className={`text-2xl font-bold ${s.color || 'text-gray-900'}`}>{s.value}</p>
+                <div key={s.label} className="stat-tile">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">{s.label}</p>
+                  <p className={`text-3xl font-bold stat-value ${s.color || 'text-gray-900'}`}>{s.value}</p>
                 </div>
               ))}
             </div>

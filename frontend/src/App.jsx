@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
@@ -13,16 +14,21 @@ import ExamSeating from './pages/exam/ExamSeating'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
-  return user ? children : <Navigate to="/login" replace />
+  // Also check localStorage token as a synchronous fallback to avoid the
+  // race where navigate() fires before setUser() re-renders the context.
+  const hasToken = Boolean(localStorage.getItem('token'))
+  if (!user && !hasToken) return <Navigate to="/login" replace />
+  return children
 }
 
 function AppRoutes() {
   const { user } = useAuth()
+  const authed = user || Boolean(localStorage.getItem('token'))
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
-      <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register />} />
+      <Route path="/login" element={authed ? <Navigate to="/dashboard" /> : <Login />} />
+      <Route path="/register" element={authed ? <Navigate to="/dashboard" /> : <Register />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/college/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
       <Route path="/college/staff" element={<ProtectedRoute><StaffDashboard /></ProtectedRoute>} />
@@ -31,7 +37,7 @@ function AppRoutes() {
       <Route path="/lodge" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
       <Route path="/hospital" element={<ProtectedRoute><HospitalDashboard /></ProtectedRoute>} />
       <Route path="/exam" element={<ProtectedRoute><ExamSeating /></ProtectedRoute>} />
-      <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
+      <Route path="/" element={authed ? <Navigate to="/dashboard" /> : <Landing />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   )

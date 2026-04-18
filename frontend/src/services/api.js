@@ -30,6 +30,8 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
   orgUsers: () => api.get('/auth/org/users'),
   authorizeUser: (userId, authorized) => api.patch(`/auth/users/${userId}/authorize?authorized=${authorized}`),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (email, code, new_password) => api.post('/auth/reset-password', { email, code, new_password }),
 }
 
 // Booking
@@ -113,6 +115,16 @@ export const hospitalAPI = {
     return api.post('/hospital/resources/upload-docx', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
   downloadTemplate: () => api.get('/hospital/resources/docx-template', { responseType: 'blob' }),
+  // Patients
+  registerPatient: (data) => api.post('/hospital/patients', data),
+  getPatients: (status) => api.get('/hospital/patients', { params: status ? { status } : {} }),
+  updatePatient: (id, data) => api.patch(`/hospital/patients/${id}`, data),
+  // Doctors
+  getDoctors: () => api.get('/hospital/doctors'),
+  suggestDoctor: (symptoms) => api.post('/hospital/doctors/suggest', symptoms),
+  setAvailability: (status) => api.patch('/hospital/doctors/availability', null, { params: { status } }),
+  // Availability
+  availabilitySummary: () => api.get('/hospital/availability'),
 }
 
 // Analytics

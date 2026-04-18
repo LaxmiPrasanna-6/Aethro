@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Sidebar from '../../components/common/Sidebar'
 import Navbar from '../../components/common/Navbar'
 import { lodgeAPI } from '../../services/api'
@@ -273,10 +274,11 @@ function UploadDocxSection({ onSuccess }) {
 }
 
 export default function ManagerDashboard() {
+  const [searchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'rooms'
   const [rooms, setRooms] = useState([])
   const [emptyRooms, setEmptyRooms] = useState(null)
   const [summary, setSummary] = useState(null)
-  const [activeTab, setActiveTab] = useState('rooms')
   const [showAddForm, setShowAddForm] = useState(false)
   const [filters, setFilters] = useState({ room_type: '', food_option: null, sharing_type: null })
 
@@ -306,24 +308,14 @@ export default function ManagerDashboard() {
     try { await lodgeAPI.release(id, 1); load() } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
   }
 
-  const TABS = [
-    { id: 'rooms', label: 'Rooms' },
-    { id: 'empty', label: 'Empty Rooms' },
-    { id: 'summary', label: 'Summary' }
-  ]
-
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Navbar title="Lodge Manager Dashboard" />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === t.id ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600'}`}>{t.label}</button>
-            ))}
-          </div>
+        <main className="flex-1 overflow-y-auto p-6 relative">
+          <div className="orb w-64 h-64 bg-emerald-300 top-[-40px] right-[-30px]" style={{ animationDelay: '1s' }} />
+          <div className="orb w-48 h-48 bg-teal-200 bottom-8 left-8" style={{ animationDelay: '4s' }} />
 
           {activeTab === 'rooms' && (
             <div className="space-y-4">
@@ -354,9 +346,9 @@ export default function ManagerDashboard() {
                   <button onClick={filter} className="btn-secondary text-xs py-1.5">Filter</button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 stagger">
                   {rooms.map(r => (
-                    <div key={r.id} className={`border rounded-xl p-4 ${r.is_available ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                    <div key={r.id} className={r.is_available ? 'card-available p-4' : 'card-occupied p-4'}>
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="font-semibold text-sm">{r.room_id}</p>
@@ -373,7 +365,7 @@ export default function ManagerDashboard() {
                           <span>Occupancy</span><span>{r.current_occupancy}/{r.sharing_type || r.capacity}</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${(r.current_occupancy / (r.sharing_type || r.capacity)) * 100}%` }} />
+                          <div className="progress-bar bg-amber-500" style={{ width: `${(r.current_occupancy / (r.sharing_type || r.capacity)) * 100}%` }} />
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -416,7 +408,7 @@ export default function ManagerDashboard() {
           )}
 
           {activeTab === 'summary' && summary && (
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 page-enter stagger">
               {[
                 { label: 'Total Rooms', value: summary.total_rooms },
                 { label: 'Available Rooms', value: summary.available_rooms, color: 'text-green-600' },
@@ -425,9 +417,9 @@ export default function ManagerDashboard() {
                 { label: 'Non-AC Rooms', value: summary.non_ac_rooms },
                 { label: 'With Food', value: summary.with_food, color: 'text-amber-600' },
               ].map(s => (
-                <div key={s.label} className="card">
-                  <p className="text-xs text-gray-500 mb-1">{s.label}</p>
-                  <p className={`text-2xl font-bold ${s.color || 'text-gray-900'}`}>{s.value}</p>
+                <div key={s.label} className="stat-tile">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">{s.label}</p>
+                  <p className={`text-3xl font-bold stat-value ${s.color || 'text-gray-900'}`}>{s.value}</p>
                 </div>
               ))}
             </div>

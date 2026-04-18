@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Sidebar from '../../components/common/Sidebar'
 import Navbar from '../../components/common/Navbar'
@@ -8,12 +8,11 @@ import Analytics from '../../components/admin/Analytics'
 import BookingList from '../../components/booking/BookingList'
 import { useAuth } from '../../context/AuthContext'
 import { authAPI } from '../../services/api'
-import { useState as useSt, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { Users, Check, X } from 'lucide-react'
 
 function UsersTab() {
-  const [users, setUsers] = useSt([])
+  const [users, setUsers] = useState([])
   useEffect(() => {
     authAPI.orgUsers().then(r => setUsers(r.data)).catch(() => {})
   }, [])
@@ -61,16 +60,9 @@ function UsersTab() {
   )
 }
 
-const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'rooms', label: 'Room Manager' },
-  { id: 'approvals', label: 'Approvals' },
-  { id: 'analytics', label: 'Analytics' },
-  { id: 'users', label: 'Users' },
-]
-
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('overview')
+  const [searchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'overview'
   const { user } = useAuth()
 
   return (
@@ -78,18 +70,12 @@ export default function AdminDashboard() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Navbar title="College Admin Dashboard" />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === t.id ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+        <main className="flex-1 overflow-y-auto p-6 relative">
+          <div className="orb w-80 h-80 bg-violet-200 top-[-80px] right-[-60px]" style={{ animationDelay: '0s' }} />
+          <div className="orb w-60 h-60 bg-blue-200 bottom-0 left-0" style={{ animationDelay: '4s' }} />
 
           {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 page-enter stagger">
               <div className="card">
                 <h2 className="font-semibold text-gray-900 mb-4">Pending Approvals</h2>
                 <BookingApproval />

@@ -76,6 +76,8 @@ async def register_user(data: dict, db) -> dict:
         "org_id": org_doc["_id"],
         "department": data.get("department"),
         "club": data.get("club"),
+        "specialization": data.get("specialization") if org_type == "hospital" and role == "doctor" else None,
+        "availability_status": "available" if org_type == "hospital" and role == "doctor" else None,
         "is_authorized": role == authority_role,
         "reputation_score": 5.0,
         "no_show_count": 0,

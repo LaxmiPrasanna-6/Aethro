@@ -864,6 +864,11 @@ HOSPITAL_TYPE_ALIASES: dict[str, str] = {
     "consulting": "consultation",
     "consulting room": "consultation",
     "bed": "bed",
+    "lab": "lab",
+    "laboratory": "lab",
+    "pathology": "lab",
+    "radiology": "lab",
+    "diagnostic": "lab",
 }
 
 HOSPITAL_FIELD_ALIASES: dict[str, str] = {
